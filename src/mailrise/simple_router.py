@@ -102,9 +102,9 @@ class SimpleRouter(Router):  # pylint: disable=too-few-public-methods
             tuple, where key contains username and domain patterns that can be
             matched by fnmatch and sender is the Sender instance itself.
     """
-    senders: typ.List[typ.Tuple[_Key, _SimpleSender]]
+    senders: typ.List[typ.Tuple[_Key, _Key, _SimpleSender]]
 
-    def __init__(self, senders: typ.List[typ.Tuple[_Key, _SimpleSender]]):
+    def __init__(self, senders: typ.List[typ.Tuple[_Key, _Key, _SimpleSender]]):
         super().__init__()
         self.senders = senders
 
@@ -159,10 +159,39 @@ def load_from_yaml(logger: Logger, configs_node: dict[str, typ.Any]) -> SimpleRo
     if not isinstance(configs_node, dict):
         logger.critical('The configs node is not a YAML mapping')
         raise SystemExit(1)
-    router = SimpleRouter(
-        senders=[(_parse_simple_key(logger, key), _parse_simple_key(logger, rev), _load_simple_sender(logger, key, config))
-                 for key, rev_config in configs_node.items() for rev, config in rev_config.items()]
-    )
+    
+    senders = []
+    for sender_key, rev_config in configs_node.items():
+        if not isinstance(rev_config, dict):
+            logger.critical("YAML config node '%s' is not a mapping", sender_key)
+            raise SystemExit(1)
+        
+        # Check if rev_config contains receiver-level nesting or direct config
+        # A direct config will have 'urls' or 'mailrise' keys at the top level
+        is_direct_config = 'urls' in rev_config or any(
+            k for k in rev_config.keys() 
+            if not isinstance(rev_config[k], dict) or k == 'mailrise'
+        )
+        
+        if is_direct_config:
+            # Direct config: sender -> config (no receiver specified)
+            # Use "*@*" as default receiver
+            default_recv = "*@*"
+            senders.append((
+                _parse_simple_key(logger, sender_key),
+                _parse_simple_key(logger, default_recv),
+                _load_simple_sender(logger, sender_key, rev_config)
+            ))
+        else:
+            # Nested config: sender -> receiver -> config
+            for recv_key, config in rev_config.items():
+                senders.append((
+                    _parse_simple_key(logger, sender_key),
+                    _parse_simple_key(logger, recv_key),
+                    _load_simple_sender(logger, sender_key, config)
+                ))
+    
+    router = SimpleRouter(senders=senders)
     if len(router.senders) < 1:
         logger.critical('No Apprise targets are configured')
         raise SystemExit(1)
