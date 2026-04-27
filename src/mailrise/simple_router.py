@@ -200,12 +200,12 @@ def load_from_yaml(logger: Logger, configs_node: dict[str, typ.Any]) -> SimpleRo
 def _parse_simple_key(logger: Logger, key: str) -> _Key:
     def fatal():
         logger.critical(
-            "Invalid config key '%s'; should be a string or an email address "
-            'without periods in the username', key)
+            "Invalid config key '%s'; should be a username or an email address. "
+            'Username-only keys cannot contain periods', key)
         raise SystemExit(1)
     if '@' in key:
         user, domain = _parseaddrparts(key)
-        if not user or not domain or '.' in user:
+        if not user or not domain:
             fatal()
         return _Key(user=user, domain=domain.lower())
     if '.' in key:
