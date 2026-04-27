@@ -178,6 +178,36 @@ def test_config_keys() -> None:
     assert router.get_sender(sender_key, rect_key) is not None
 
 
+def test_config_keys_allow_dotted_full_email_addresses() -> None:
+    """Tests full email config keys with periods in the username."""
+    file = StringIO("""
+        configs:
+          foo.bar@example.com:
+            urls:
+              - json://localhost
+    """)
+    mrise = load_config(_logger, file)
+    router = mrise.router
+    assert isinstance(router, SimpleRouter)
+    sender_key = _Key(user='*@*')
+    rect_key = _Key(user='foo.bar', domain='example.com')
+    assert router.get_sender(sender_key, rect_key) is not None
+
+    file = StringIO("""
+        configs:
+          sender.name@example.com:
+            foo.bar@example.net:
+              urls:
+                - json://localhost
+    """)
+    mrise = load_config(_logger, file)
+    router = mrise.router
+    assert isinstance(router, SimpleRouter)
+    sender_key = _Key(user='sender.name', domain='example.com')
+    rect_key = _Key(user='foo.bar', domain='example.net')
+    assert router.get_sender(sender_key, rect_key) is not None
+
+
 def test_fnmatch_config_keys() -> None:
     """Tests the config key parser with fnmatch pattern tokens."""
     # This defaults to "*@mailrise.xyz", which may not be obvious at first
